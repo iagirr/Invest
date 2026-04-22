@@ -1,4 +1,46 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Neon Ledger
+
+Dashboard local para seguir una cartera personal de acciones y ETFs con estética cyberpunk.
+
+## Qué hace
+
+- Alta manual de operaciones
+- Persistencia local en SQLite
+- Refresco manual de mercado con Yahoo Finance
+- Resumen consolidado en EUR
+- Tabla de posiciones, distribución y evolución frente a benchmark
+
+## Arranque
+
+```bash
+npm install
+npm run dev
+```
+
+## Refresco de mercado
+
+```bash
+npm run refresh
+```
+
+## Backup de la base local
+
+```bash
+npm run backup
+```
+
+## Exportaciones
+
+- Desde la UI: `Export JSON` y `Export CSV`
+- Archivos generados:
+  - `data/backups/*.db`
+  - `data/exports/*.json`
+  - `data/exports/*.csv`
+
+## Notas
+
+- La base SQLite se guarda en `data/portfolio.db`.
+- Para operaciones no EUR, la v1 pide `fxRateToEur` manual en la transacción para mantener el coste en EUR con criterio estable.
 
 ## Getting Started
 

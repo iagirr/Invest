@@ -16,6 +16,9 @@
 # next.js
 /.next/
 /out/
+/data/
+/devserver.stdout.log
+/devserver.stderr.log
 
 # production
 /build
