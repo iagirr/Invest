@@ -1,0 +1,4 @@
+interface:
+  display_name: "Maintain Invest App"
+  short_description: "Work on this local portfolio tracker safely and consistently."
+  default_prompt: "Use this skill when changing the invest tracker app, especially for Next 16, portfolio calculations, SQLite persistence, API routes, refresh/export flows, and dashboard behavior."
