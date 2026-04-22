@@ -3,8 +3,8 @@ import { getDashboardData } from "@/lib/portfolio";
 
 export const dynamic = "force-dynamic";
 
-export default function Home() {
-  const dashboard = getDashboardData();
+export default async function Home() {
+  const dashboard = await getDashboardData();
 
   return <DashboardShell initialData={dashboard} />;
 }

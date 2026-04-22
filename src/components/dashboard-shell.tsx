@@ -9,12 +9,13 @@ import {
   Download,
   Gauge,
   HardDriveDownload,
-  Plus,
+  Pencil,
   RefreshCw,
   Save,
   Search,
   Sparkles,
   Wallet,
+  X,
 } from "lucide-react";
 
 import { DashboardCharts } from "@/components/dashboard-charts";
@@ -29,6 +30,42 @@ type AssetSearchResult = {
   name: string;
   assetType: "stock" | "etf" | "fund";
   exchange: string;
+};
+
+type TrackingFormState = {
+  symbol: string;
+  name: string;
+  assetType: "stock" | "etf" | "fund";
+  startDate: string;
+  startDatePrecision: "exact" | "estimated";
+  endDate: string;
+  initialAmountEur: string;
+  currentAmountEur: string;
+  totalReturnPercent: string;
+  isActive: boolean;
+  returnPrecision: "exact" | "estimated";
+};
+
+type ContributionFormState = {
+  trackedInstrumentId: string;
+  flowType: "contribution" | "withdrawal";
+  amountEur: string;
+  flowDate: string;
+};
+
+type HoldingSortKey =
+  | "symbol"
+  | "status"
+  | "startDate"
+  | "initialAmountEur"
+  | "currentAmountEur"
+  | "basisAmountEur"
+  | "futureNetFlowsEur"
+  | "plEur";
+
+type HoldingSortState = {
+  key: HoldingSortKey;
+  direction: "asc" | "desc";
 };
 
 const formatter = new Intl.NumberFormat("es-ES", {
@@ -53,33 +90,49 @@ function toInputDate() {
   return new Date().toISOString().slice(0, 10);
 }
 
-export function DashboardShell({ initialData }: Props) {
-  const [data, setData] = useState(initialData);
-  const [trackingForm, setTrackingForm] = useState({
+function createEmptyTrackingForm(): TrackingFormState {
+  return {
     symbol: "",
     name: "",
-    assetType: "fund" as "stock" | "etf" | "fund",
+    assetType: "fund",
     startDate: toInputDate(),
-    startDatePrecision: "estimated" as "exact" | "estimated",
+    startDatePrecision: "estimated",
     endDate: "",
     initialAmountEur: "",
     currentAmountEur: "",
     totalReturnPercent: "",
     isActive: true,
-    returnPrecision: "estimated" as "exact" | "estimated",
-  });
-  const [contributionForm, setContributionForm] = useState({
-    trackedInstrumentId: initialData.holdings.find((item) => item.status === "active")?.id?.toString() ?? "",
-    flowType: "contribution" as "contribution" | "withdrawal",
+    returnPrecision: "estimated",
+  };
+}
+
+function createEmptyContributionForm(defaultInstrumentId = ""): ContributionFormState {
+  return {
+    trackedInstrumentId: defaultInstrumentId,
+    flowType: "contribution",
     amountEur: "",
     flowDate: toInputDate(),
-  });
+  };
+}
+
+export function DashboardShell({ initialData }: Props) {
+  const [data, setData] = useState(initialData);
+  const [trackingForm, setTrackingForm] = useState<TrackingFormState>(createEmptyTrackingForm);
+  const [contributionForm, setContributionForm] = useState<ContributionFormState>(() =>
+    createEmptyContributionForm(initialData.holdings.find((item) => item.status === "active")?.id?.toString() ?? ""),
+  );
   const [assetQuery, setAssetQuery] = useState("");
   const [assetResults, setAssetResults] = useState<AssetSearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [benchmarkSymbol, setBenchmarkSymbol] = useState(initialData.settings.benchmarkSymbol);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [editingInstrumentId, setEditingInstrumentId] = useState<number | null>(null);
+  const [editingFlowId, setEditingFlowId] = useState<number | null>(null);
+  const [holdingSort, setHoldingSort] = useState<HoldingSortState>({
+    key: "currentAmountEur",
+    direction: "desc",
+  });
   const [isPending, startTransition] = useTransition();
 
   useEffect(() => {
@@ -112,43 +165,75 @@ export function DashboardShell({ initialData }: Props) {
   const metrics = useMemo(
     () => [
       {
-        label: "Valor total",
+        label: "Valor de mercado",
         value: formatCurrency(data.summary.totalValueEur),
         icon: Wallet,
         tone: "text-cyan-200",
+        note: "estimado hoy segun cotizacion o valor final",
       },
       {
-        label: "P/L total",
+        label: "Base acumulada",
+        value: formatCurrency(data.summary.totalCostEur),
+        icon: BarChart3,
+        tone: "text-amber-200",
+        note: "capital base mas flujos posteriores",
+      },
+      {
+        label: "Ganancia / perdida",
         value: `${formatCurrency(data.summary.totalPlEur)} | ${formatPercent(data.summary.totalPlPercent)}`,
         icon: Activity,
         tone: data.summary.totalPlEur >= 0 ? "text-emerald-300" : "text-rose-300",
+        note: "diferencia entre valor actual y base acumulada",
       },
       {
-        label: "Aportaciones futuras",
-        value: formatCurrency(data.summary.totalFutureFlowsEur),
-        icon: Plus,
-        tone: data.summary.totalFutureFlowsEur >= 0 ? "text-amber-200" : "text-rose-300",
-      },
-      {
-        label: "Activos / cerrados",
-        value: `${data.summary.activePositions} / ${data.summary.inactivePositions}`,
-        icon: BarChart3,
+        label: `Frente a ${data.settings.benchmarkSymbol}`,
+        value: formatPercent(data.summary.benchmarkDelta),
+        icon: Gauge,
         tone: "text-fuchsia-300",
+        note: "ventaja o desventaja acumulada frente al indice",
       },
     ],
-    [data.summary],
+    [data.settings.benchmarkSymbol, data.summary],
   );
 
   const periodMetrics = useMemo(
     () => [
-      { label: "Diario", value: data.summary.periodReturns.day },
-      { label: "Semanal", value: data.summary.periodReturns.week },
-      { label: "Mensual", value: data.summary.periodReturns.month },
-      { label: "Anual", value: data.summary.periodReturns.year },
-      { label: "Desde base", value: data.summary.periodReturns.sinceStart },
+      { label: "Ult. 24 h", value: data.summary.periodReturns.day },
+      { label: "Ult. 7 dias", value: data.summary.periodReturns.week },
+      { label: "Ult. 30 dias", value: data.summary.periodReturns.month },
+      { label: "Ult. 12 meses", value: data.summary.periodReturns.year },
+      { label: "Desde inicio", value: data.summary.periodReturns.sinceStart },
     ],
     [data.summary.periodReturns],
   );
+
+  const sortedHoldings = useMemo(() => {
+    const directionFactor = holdingSort.direction === "asc" ? 1 : -1;
+    const statusRank = { active: 0, inactive: 1 } as const;
+
+    return [...data.holdings].sort((left, right) => {
+      switch (holdingSort.key) {
+        case "symbol":
+          return left.symbol.localeCompare(right.symbol) * directionFactor;
+        case "status":
+          return (statusRank[left.status] - statusRank[right.status]) * directionFactor;
+        case "startDate":
+          return left.startDate.localeCompare(right.startDate) * directionFactor;
+        case "initialAmountEur":
+          return (left.initialAmountEur - right.initialAmountEur) * directionFactor;
+        case "currentAmountEur":
+          return (left.currentAmountEur - right.currentAmountEur) * directionFactor;
+        case "basisAmountEur":
+          return (left.basisAmountEur - right.basisAmountEur) * directionFactor;
+        case "futureNetFlowsEur":
+          return (left.futureNetFlowsEur - right.futureNetFlowsEur) * directionFactor;
+        case "plEur":
+          return (left.plEur - right.plEur) * directionFactor;
+        default:
+          return 0;
+      }
+    });
+  }, [data.holdings, holdingSort]);
 
   async function reloadDashboard(nextMessage?: string) {
     const response = await fetch("/api/dashboard", { cache: "no-store" });
@@ -166,6 +251,71 @@ export function DashboardShell({ initialData }: Props) {
         current.trackedInstrumentId || dashboard.holdings.find((item) => item.status === "active")?.id?.toString() || "",
     }));
     setMessage(nextMessage ?? null);
+  }
+
+  function resetTrackingForm() {
+    setTrackingForm(createEmptyTrackingForm());
+    setAssetQuery("");
+    setAssetResults([]);
+    setEditingInstrumentId(null);
+  }
+
+  function resetContributionForm(nextInstrumentId?: string) {
+    const defaultInstrumentId =
+      nextInstrumentId ?? data.holdings.find((item) => item.status === "active")?.id?.toString() ?? "";
+    setContributionForm(createEmptyContributionForm(defaultInstrumentId));
+    setEditingFlowId(null);
+  }
+
+  function startEditingInstrument(holding: DashboardData["holdings"][number]) {
+    setEditingInstrumentId(holding.id);
+    setTrackingForm({
+      symbol: holding.symbol,
+      name: holding.name,
+      assetType: holding.assetType,
+      startDate: holding.startDate,
+      startDatePrecision: holding.startDatePrecision,
+      endDate: holding.endDate ?? "",
+      initialAmountEur: String(holding.initialAmountEur),
+      currentAmountEur: String(holding.currentAmountEur),
+      totalReturnPercent: String(holding.totalReturnPercent),
+      isActive: holding.status === "active",
+      returnPrecision: holding.returnPrecision,
+    });
+    setAssetQuery(`${holding.symbol} - ${holding.name}`);
+    setAssetResults([]);
+  }
+
+  function startEditingFlow(flow: DashboardData["latestFlows"][number]) {
+    setEditingFlowId(flow.id);
+    setContributionForm({
+      trackedInstrumentId: flow.trackedInstrumentId.toString(),
+      flowType: flow.flowType,
+      amountEur: String(flow.amountEur),
+      flowDate: flow.flowDate,
+    });
+  }
+
+  function toggleHoldingSort(key: HoldingSortKey) {
+    setHoldingSort((current) =>
+      current.key === key
+        ? {
+            key,
+            direction: current.direction === "asc" ? "desc" : "asc",
+          }
+        : {
+            key,
+            direction: key === "symbol" || key === "status" || key === "startDate" ? "asc" : "desc",
+          },
+    );
+  }
+
+  function getSortLabel(key: HoldingSortKey, label: string) {
+    if (holdingSort.key !== key) {
+      return label;
+    }
+
+    return `${label} ${holdingSort.direction === "asc" ? "↑" : "↓"}`;
   }
 
   async function handleRefresh() {
@@ -200,9 +350,10 @@ export function DashboardShell({ initialData }: Props) {
     startTransition(async () => {
       try {
         const response = await fetch("/api/seed-position", {
-          method: "POST",
+          method: editingInstrumentId ? "PUT" : "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
+            ...(editingInstrumentId ? { id: editingInstrumentId } : {}),
             ...trackingForm,
             initialAmountEur: Number(trackingForm.initialAmountEur),
             currentAmountEur: Number(trackingForm.currentAmountEur),
@@ -217,25 +368,15 @@ export function DashboardShell({ initialData }: Props) {
           throw new Error(payload.error ?? "No se pudo registrar el seguimiento inicial.");
         }
 
-        await reloadDashboard("Instrumento de seguimiento guardado.");
-        setTrackingForm({
-          symbol: "",
-          name: "",
-          assetType: "fund",
-          startDate: toInputDate(),
-          startDatePrecision: "estimated",
-          endDate: "",
-          initialAmountEur: "",
-          currentAmountEur: "",
-          totalReturnPercent: "",
-          isActive: true,
-          returnPrecision: "estimated",
-        });
-        setAssetQuery("");
-        setAssetResults([]);
+        await reloadDashboard(editingInstrumentId ? "Foto inicial actualizada." : "Instrumento de seguimiento guardado.");
+        resetTrackingForm();
       } catch (trackingError) {
         setError(
-          trackingError instanceof Error ? trackingError.message : "No se pudo registrar el seguimiento inicial.",
+          trackingError instanceof Error
+            ? trackingError.message
+            : editingInstrumentId
+              ? "No se pudo actualizar el seguimiento inicial."
+              : "No se pudo registrar el seguimiento inicial.",
         );
       }
     });
@@ -249,9 +390,10 @@ export function DashboardShell({ initialData }: Props) {
     startTransition(async () => {
       try {
         const response = await fetch("/api/contributions", {
-          method: "POST",
+          method: editingFlowId ? "PUT" : "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
+            ...(editingFlowId ? { id: editingFlowId } : {}),
             trackedInstrumentId: Number(contributionForm.trackedInstrumentId),
             flowType: contributionForm.flowType,
             amountEur: Number(contributionForm.amountEur),
@@ -266,16 +408,22 @@ export function DashboardShell({ initialData }: Props) {
         }
 
         await reloadDashboard(
-          contributionForm.flowType === "contribution" ? "Aportacion registrada." : "Retirada registrada.",
+          editingFlowId
+            ? contributionForm.flowType === "contribution"
+              ? "Aportacion actualizada."
+              : "Retirada actualizada."
+            : contributionForm.flowType === "contribution"
+              ? "Aportacion registrada."
+              : "Retirada registrada.",
         );
-        setContributionForm((current) => ({
-          ...current,
-          amountEur: "",
-          flowDate: toInputDate(),
-        }));
+        resetContributionForm(contributionForm.trackedInstrumentId);
       } catch (contributionError) {
         setError(
-          contributionError instanceof Error ? contributionError.message : "No se pudo registrar la aportacion.",
+          contributionError instanceof Error
+            ? contributionError.message
+            : editingFlowId
+              ? "No se pudo actualizar la aportacion."
+              : "No se pudo registrar la aportacion.",
         );
       }
     });
@@ -346,17 +494,17 @@ export function DashboardShell({ initialData }: Props) {
   const activeHoldings = data.holdings.filter((item) => item.status === "active");
 
   return (
-    <main className="mx-auto flex w-full max-w-[1680px] flex-1 flex-col gap-6 px-4 py-6 sm:px-6 xl:px-8">
-      <section className="panel scanline rounded-lg px-5 py-5 sm:px-6">
+    <main className="mx-auto flex w-full max-w-[1680px] flex-1 flex-col gap-5 px-3 py-4 sm:gap-6 sm:px-6 sm:py-6 xl:px-8">
+      <section className="panel scanline rounded-lg px-4 py-4 sm:px-6 sm:py-5">
         <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
           <div className="max-w-3xl">
-            <p className="text-xs uppercase tracking-[0.34em] text-cyan-200/80">Neon Ledger</p>
-            <h1 className="neon-text mt-3 text-3xl font-semibold text-white sm:text-4xl">
-              Foto inicial cerrada. Aportaciones futuras reales.
+            <p className="text-xs uppercase tracking-[0.34em] text-amber-200/80">Archivo de cartera</p>
+            <h1 className="neon-text mt-3 text-2xl font-semibold text-white sm:text-4xl">
+              Panel de cartera en clave dieselpunk.
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-muted sm:text-base">
-              El pasado se resume en una carga flexible coherente. Desde hoy, cada aportacion o retirada mensual queda
-              registrada como movimiento real y se incorpora al seguimiento.
+              La foto inicial fija el punto de partida de cada instrumento. A partir de ahi, el panel estima la
+              evolucion desde esa fecha y suma cada aportacion o retirada posterior como movimiento real.
             </p>
           </div>
 
@@ -370,14 +518,14 @@ export function DashboardShell({ initialData }: Props) {
               <p className="mt-2 text-lg font-semibold text-white">{data.settings.benchmarkSymbol}</p>
             </div>
             <div className="panel-muted rounded-md px-4 py-3">
-              <p className="text-xs uppercase tracking-[0.28em] text-muted">Ultimo refresh</p>
+              <p className="text-xs uppercase tracking-[0.28em] text-muted">Ultima actualizacion</p>
               <p className="mt-2 text-sm font-medium text-white">{data.summary.lastUpdatedHuman}</p>
             </div>
           </div>
         </div>
 
         <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex min-h-10 items-center gap-3">
+          <div className="flex min-h-10 flex-col justify-center gap-2 sm:flex-row sm:items-center sm:gap-3">
             {message ? <p className="text-sm text-cyan-200">{message}</p> : null}
             {error ? (
               <p className="flex items-center gap-2 text-sm text-rose-300">
@@ -390,12 +538,12 @@ export function DashboardShell({ initialData }: Props) {
             ) : null}
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="grid w-full gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center">
             <button
               type="button"
               onClick={() => handleExport("json")}
               disabled={isPending}
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-white/12 bg-white/5 px-4 text-sm font-medium text-white transition hover:bg-white/8 disabled:opacity-70"
+              className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-md border border-white/12 bg-white/5 px-4 text-sm font-medium text-white transition hover:bg-white/8 disabled:opacity-70 sm:w-auto"
             >
               <Download className="h-4 w-4" />
               Export JSON
@@ -404,7 +552,7 @@ export function DashboardShell({ initialData }: Props) {
               type="button"
               onClick={() => handleExport("csv")}
               disabled={isPending}
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-white/12 bg-white/5 px-4 text-sm font-medium text-white transition hover:bg-white/8 disabled:opacity-70"
+              className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-md border border-white/12 bg-white/5 px-4 text-sm font-medium text-white transition hover:bg-white/8 disabled:opacity-70 sm:w-auto"
             >
               <Download className="h-4 w-4" />
               Export CSV
@@ -413,7 +561,7 @@ export function DashboardShell({ initialData }: Props) {
               type="button"
               onClick={handleBackup}
               disabled={isPending}
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-amber-300/30 bg-amber-300/10 px-4 text-sm font-medium text-amber-100 transition hover:bg-amber-300/16 disabled:opacity-70"
+              className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-md border border-amber-300/30 bg-amber-300/10 px-4 text-sm font-medium text-amber-100 transition hover:bg-amber-300/16 disabled:opacity-70 sm:w-auto"
             >
               <HardDriveDownload className="h-4 w-4" />
               Crear backup
@@ -422,7 +570,7 @@ export function DashboardShell({ initialData }: Props) {
               type="button"
               onClick={handleRefresh}
               disabled={isPending}
-              className="shadow-neon inline-flex h-11 items-center justify-center gap-2 rounded-md border border-cyan-300/30 bg-cyan-300/10 px-4 text-sm font-medium text-cyan-100 transition hover:bg-cyan-300/16 disabled:opacity-70"
+              className="shadow-neon inline-flex h-11 w-full items-center justify-center gap-2 rounded-md border border-cyan-300/30 bg-cyan-300/10 px-4 text-sm font-medium text-cyan-100 transition hover:bg-cyan-300/16 disabled:opacity-70 sm:w-auto"
             >
               <RefreshCw className={`h-4 w-4 ${isPending ? "animate-spin" : ""}`} />
               Refrescar mercado
@@ -437,9 +585,10 @@ export function DashboardShell({ initialData }: Props) {
           return (
             <article key={metric.label} className="panel rounded-lg p-4">
               <div className="flex items-start justify-between gap-3">
-                <div>
+                <div className="min-w-0">
                   <p className="text-xs uppercase tracking-[0.28em] text-muted">{metric.label}</p>
-                  <p className={`mt-3 text-2xl font-semibold ${metric.tone}`}>{metric.value}</p>
+                  <p className={`mt-3 break-words text-xl font-semibold sm:text-2xl ${metric.tone}`}>{metric.value}</p>
+                  <p className="mt-2 text-xs text-muted">{metric.note}</p>
                 </div>
                 <div className="rounded-md border border-white/8 bg-white/4 p-2">
                   <Icon className={`h-5 w-5 ${metric.tone}`} />
@@ -450,7 +599,7 @@ export function DashboardShell({ initialData }: Props) {
         })}
       </section>
 
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         {periodMetrics.map((metric) => (
           <article key={metric.label} className="panel-muted rounded-lg px-4 py-3">
             <p className="text-xs uppercase tracking-[0.28em] text-muted">{metric.label}</p>
@@ -461,7 +610,7 @@ export function DashboardShell({ initialData }: Props) {
             >
               {formatPercent(metric.value)}
             </p>
-            <p className="mt-1 text-xs text-muted">se afina con cada refresh y cada nueva aportacion real</p>
+            <p className="mt-1 text-xs text-muted">rentabilidad estimada para ese tramo</p>
           </article>
         ))}
       </section>
@@ -471,37 +620,157 @@ export function DashboardShell({ initialData }: Props) {
           <DashboardCharts data={data} />
 
           <section className="panel rounded-lg p-5">
-            <div className="mb-5 flex items-center justify-between gap-4">
+            <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="text-xs uppercase tracking-[0.28em] text-cyan-200/75">Seguimiento</p>
+                <p className="text-xs uppercase tracking-[0.28em] text-amber-200/75">Instrumentos</p>
                 <h2 className="mt-2 text-xl font-semibold text-white">Instrumentos cargados</h2>
               </div>
-              <p className="text-xs text-muted">foto historica + movimientos futuros</p>
+              <p className="text-xs text-muted">puedes ordenar y editar cualquier posicion</p>
             </div>
 
-            <div className="overflow-x-auto">
+            <div className="grid gap-3 md:hidden">
+              {sortedHoldings.length === 0 ? (
+                <div className="rounded-md border border-dashed border-white/10 px-4 py-6 text-sm text-muted">
+                  Todavia no has cargado instrumentos. Empieza con tu foto inicial.
+                </div>
+              ) : (
+                sortedHoldings.map((holding) => (
+                  <article key={holding.id} className="rounded-md border border-white/8 bg-white/4 p-4">
+                    <div className="flex flex-col gap-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="font-medium text-white">{holding.symbol}</p>
+                          <p className="text-sm text-muted">{holding.name}</p>
+                        </div>
+                        <span
+                          className={`shrink-0 rounded-full px-2 py-1 text-[11px] uppercase tracking-[0.2em] ${
+                            holding.status === "active" ? "bg-cyan-300/12 text-cyan-200" : "bg-white/10 text-white"
+                          }`}
+                        >
+                          {holding.status === "active" ? "Activo" : "Cerrado"}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between gap-3 text-[11px] uppercase tracking-[0.2em]">
+                        <span className="text-cyan-200">{holding.assetType}</span>
+                        <span className="text-muted">
+                          {holding.startDatePrecision === "exact" ? "fecha exacta" : "fecha estimada"}
+                        </span>
+                      </div>
+
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div>
+                          <p className="text-[11px] uppercase tracking-[0.2em] text-muted">Inicio</p>
+                          <p className="mt-1 text-sm text-white">{holding.startDate}</p>
+                          {holding.endDate ? <p className="text-xs text-muted">fin: {holding.endDate}</p> : null}
+                        </div>
+                        <div>
+                          <p className="text-[11px] uppercase tracking-[0.2em] text-muted">Inicial</p>
+                          <p className="mt-1 text-sm text-white">{formatCurrency(holding.initialAmountEur)}</p>
+                        </div>
+                        <div>
+                          <p className="text-[11px] uppercase tracking-[0.2em] text-muted">Actual / cierre</p>
+                          <p className="mt-1 text-sm text-white">{formatCurrency(holding.currentAmountEur)}</p>
+                        </div>
+                        <div>
+                          <p className="text-[11px] uppercase tracking-[0.2em] text-muted">Base acumulada</p>
+                          <p className="mt-1 text-sm text-white">{formatCurrency(holding.basisAmountEur)}</p>
+                        </div>
+                        <div>
+                          <p className="text-[11px] uppercase tracking-[0.2em] text-muted">Aport. futuras</p>
+                          <p className={`mt-1 text-sm ${holding.futureNetFlowsEur >= 0 ? "text-cyan-200" : "text-rose-300"}`}>
+                            {formatCurrency(holding.futureNetFlowsEur)}
+                          </p>
+                          <p className="text-xs text-muted">
+                            hist.: {formatCurrency(holding.historicalEstimatedContributionsEur)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[11px] uppercase tracking-[0.2em] text-muted">P/L</p>
+                          <p className={`mt-1 text-sm ${holding.plEur >= 0 ? "text-emerald-300" : "text-rose-300"}`}>
+                            {formatCurrency(holding.plEur)}
+                          </p>
+                          <p className="text-xs text-muted">{formatPercent(holding.plPercent)}</p>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => startEditingInstrument(holding)}
+                        className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-cyan-300/20 bg-cyan-300/8 px-3 text-sm font-medium text-cyan-100 transition hover:bg-cyan-300/14"
+                      >
+                        <Pencil className="h-4 w-4" />
+                        Editar foto inicial
+                      </button>
+                    </div>
+                  </article>
+                ))
+              )}
+            </div>
+
+            <div className="hidden overflow-x-auto md:block">
               <table className="min-w-full text-left text-sm">
                 <thead className="text-xs uppercase tracking-[0.24em] text-muted">
                   <tr>
-                    <th className="pb-3 pr-4 font-medium">Activo</th>
-                    <th className="pb-3 pr-4 font-medium">Estado</th>
-                    <th className="pb-3 pr-4 font-medium">Inicio</th>
-                    <th className="pb-3 pr-4 font-medium">Inicial</th>
-                    <th className="pb-3 pr-4 font-medium">Actual / cierre</th>
-                    <th className="pb-3 pr-4 font-medium">Base acumulada</th>
-                    <th className="pb-3 pr-4 font-medium">Aport. futuras</th>
-                    <th className="pb-3 pr-4 font-medium">P/L</th>
+                    <th className="pb-3 pr-4 font-medium">
+                      <button type="button" onClick={() => toggleHoldingSort("symbol")} className="inline-flex items-center gap-1 hover:text-white">
+                        {getSortLabel("symbol", "Activo")}
+                        <ArrowUpDown className="h-3.5 w-3.5" />
+                      </button>
+                    </th>
+                    <th className="pb-3 pr-4 font-medium">
+                      <button type="button" onClick={() => toggleHoldingSort("status")} className="inline-flex items-center gap-1 hover:text-white">
+                        {getSortLabel("status", "Estado")}
+                        <ArrowUpDown className="h-3.5 w-3.5" />
+                      </button>
+                    </th>
+                    <th className="pb-3 pr-4 font-medium">
+                      <button type="button" onClick={() => toggleHoldingSort("startDate")} className="inline-flex items-center gap-1 hover:text-white">
+                        {getSortLabel("startDate", "Inicio")}
+                        <ArrowUpDown className="h-3.5 w-3.5" />
+                      </button>
+                    </th>
+                    <th className="pb-3 pr-4 font-medium">
+                      <button type="button" onClick={() => toggleHoldingSort("initialAmountEur")} className="inline-flex items-center gap-1 hover:text-white">
+                        {getSortLabel("initialAmountEur", "Inicial")}
+                        <ArrowUpDown className="h-3.5 w-3.5" />
+                      </button>
+                    </th>
+                    <th className="pb-3 pr-4 font-medium">
+                      <button type="button" onClick={() => toggleHoldingSort("currentAmountEur")} className="inline-flex items-center gap-1 hover:text-white">
+                        {getSortLabel("currentAmountEur", "Actual / cierre")}
+                        <ArrowUpDown className="h-3.5 w-3.5" />
+                      </button>
+                    </th>
+                    <th className="pb-3 pr-4 font-medium">
+                      <button type="button" onClick={() => toggleHoldingSort("basisAmountEur")} className="inline-flex items-center gap-1 hover:text-white">
+                        {getSortLabel("basisAmountEur", "Base acumulada")}
+                        <ArrowUpDown className="h-3.5 w-3.5" />
+                      </button>
+                    </th>
+                    <th className="pb-3 pr-4 font-medium">
+                      <button type="button" onClick={() => toggleHoldingSort("futureNetFlowsEur")} className="inline-flex items-center gap-1 hover:text-white">
+                        {getSortLabel("futureNetFlowsEur", "Aport. futuras")}
+                        <ArrowUpDown className="h-3.5 w-3.5" />
+                      </button>
+                    </th>
+                    <th className="pb-3 pr-4 font-medium">
+                      <button type="button" onClick={() => toggleHoldingSort("plEur")} className="inline-flex items-center gap-1 hover:text-white">
+                        {getSortLabel("plEur", "P/L")}
+                        <ArrowUpDown className="h-3.5 w-3.5" />
+                      </button>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {data.holdings.length === 0 ? (
+                  {sortedHoldings.length === 0 ? (
                     <tr>
                       <td colSpan={8} className="py-8 text-center text-sm text-muted">
                         Todavia no has cargado instrumentos. Empieza con tu foto inicial.
                       </td>
                     </tr>
                   ) : (
-                    data.holdings.map((holding) => (
+                    sortedHoldings.map((holding) => (
                       <tr key={holding.id} className="border-t border-white/6">
                         <td className="py-4 pr-4 align-top">
                           <div className="flex flex-col">
@@ -510,6 +779,14 @@ export function DashboardShell({ initialData }: Props) {
                             <span className="mt-1 text-[11px] uppercase tracking-[0.2em] text-cyan-200">
                               {holding.assetType}
                             </span>
+                            <button
+                              type="button"
+                              onClick={() => startEditingInstrument(holding)}
+                              className="mt-3 inline-flex h-8 w-fit items-center gap-2 rounded-md border border-cyan-300/20 bg-cyan-300/8 px-2.5 text-xs font-medium text-cyan-100 transition hover:bg-cyan-300/14"
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                              Editar
+                            </button>
                           </div>
                         </td>
                         <td className="py-4 pr-4 align-top">
@@ -570,11 +847,19 @@ export function DashboardShell({ initialData }: Props) {
               </div>
               <div>
                 <p className="text-xs uppercase tracking-[0.28em] text-muted">Carga flexible</p>
-                <h2 className="mt-1 text-lg font-semibold text-white">Foto inicial</h2>
+                <h2 className="mt-1 text-lg font-semibold text-white">
+                  {editingInstrumentId ? "Editar foto inicial" : "Foto inicial"}
+                </h2>
               </div>
             </div>
 
             <form className="grid gap-3" onSubmit={handleTrackingSubmit}>
+              {editingInstrumentId ? (
+                <div className="rounded-md border border-cyan-300/18 bg-cyan-300/8 px-3 py-3 text-sm text-cyan-100">
+                  Estás editando un instrumento ya cargado.
+                </div>
+              ) : null}
+
               <label className="grid gap-1.5">
                 <span className="text-xs uppercase tracking-[0.2em] text-muted">Buscar fondo, ETF o accion</span>
                 <div className="relative">
@@ -603,13 +888,13 @@ export function DashboardShell({ initialData }: Props) {
                       key={`${asset.symbol}-${asset.exchange}`}
                       type="button"
                       onClick={() => selectAsset(asset)}
-                      className="flex w-full items-center justify-between border-b border-white/6 px-3 py-3 text-left last:border-b-0 hover:bg-white/5"
+                      className="flex w-full flex-col items-start gap-2 border-b border-white/6 px-3 py-3 text-left last:border-b-0 hover:bg-white/5 sm:flex-row sm:items-center sm:justify-between"
                     >
                       <div>
                         <p className="text-sm font-medium text-white">{asset.symbol}</p>
                         <p className="text-xs text-muted">{asset.name}</p>
                       </div>
-                      <div className="text-right">
+                      <div className="text-left sm:text-right">
                         <p className="text-xs uppercase tracking-[0.2em] text-cyan-200">{asset.assetType}</p>
                         <p className="text-xs text-muted">{asset.exchange}</p>
                       </div>
@@ -754,11 +1039,21 @@ export function DashboardShell({ initialData }: Props) {
               <button
                 type="submit"
                 disabled={isPending || !trackingForm.symbol}
-                className="mt-1 inline-flex h-11 items-center justify-center gap-2 rounded-md border border-cyan-300/30 bg-cyan-300/10 px-4 text-sm font-medium text-cyan-100 transition hover:bg-cyan-300/16 disabled:cursor-not-allowed disabled:opacity-60"
+                className="mt-1 inline-flex h-11 w-full items-center justify-center gap-2 rounded-md border border-cyan-300/30 bg-cyan-300/10 px-4 text-sm font-medium text-cyan-100 transition hover:bg-cyan-300/16 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <Save className="h-4 w-4" />
-                Guardar foto inicial
+                {editingInstrumentId ? "Guardar cambios" : "Guardar foto inicial"}
               </button>
+              {editingInstrumentId ? (
+                <button
+                  type="button"
+                  onClick={resetTrackingForm}
+                  className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-md border border-white/12 bg-white/5 px-4 text-sm font-medium text-white transition hover:bg-white/8"
+                >
+                  <X className="h-4 w-4" />
+                  Cancelar edicion
+                </button>
+              ) : null}
             </form>
           </section>
 
@@ -769,11 +1064,19 @@ export function DashboardShell({ initialData }: Props) {
               </div>
               <div>
                 <p className="text-xs uppercase tracking-[0.28em] text-muted">Futuro real</p>
-                <h2 className="mt-1 text-lg font-semibold text-white">Aportacion mensual</h2>
+                <h2 className="mt-1 text-lg font-semibold text-white">
+                  {editingFlowId ? "Editar movimiento" : "Aportacion mensual"}
+                </h2>
               </div>
             </div>
 
             <form className="grid gap-3" onSubmit={handleContributionSubmit}>
+              {editingFlowId ? (
+                <div className="rounded-md border border-fuchsia-300/18 bg-fuchsia-300/8 px-3 py-3 text-sm text-fuchsia-100">
+                  Estás editando un movimiento existente.
+                </div>
+              ) : null}
+
               <label className="grid gap-1.5">
                 <span className="text-xs uppercase tracking-[0.2em] text-muted">Instrumento</span>
                 <select
@@ -781,6 +1084,7 @@ export function DashboardShell({ initialData }: Props) {
                   onChange={(event) =>
                     setContributionForm((current) => ({ ...current, trackedInstrumentId: event.target.value }))
                   }
+                  disabled={editingFlowId !== null}
                   className="rounded-md border border-white/10 bg-[#130e22] px-3 py-2.5 text-sm text-white outline-none focus:border-fuchsia-300/40"
                 >
                   <option value="">Selecciona un activo activo</option>
@@ -838,11 +1142,21 @@ export function DashboardShell({ initialData }: Props) {
               <button
                 type="submit"
                 disabled={isPending || !contributionForm.trackedInstrumentId}
-                className="mt-1 inline-flex h-11 items-center justify-center gap-2 rounded-md border border-fuchsia-300/30 bg-fuchsia-300/10 px-4 text-sm font-medium text-fuchsia-100 transition hover:bg-fuchsia-300/16 disabled:cursor-not-allowed disabled:opacity-60"
+                className="mt-1 inline-flex h-11 w-full items-center justify-center gap-2 rounded-md border border-fuchsia-300/30 bg-fuchsia-300/10 px-4 text-sm font-medium text-fuchsia-100 transition hover:bg-fuchsia-300/16 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <Save className="h-4 w-4" />
-                Registrar movimiento
+                {editingFlowId ? "Guardar cambios" : "Registrar movimiento"}
               </button>
+              {editingFlowId ? (
+                <button
+                  type="button"
+                  onClick={() => resetContributionForm()}
+                  className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-md border border-white/12 bg-white/5 px-4 text-sm font-medium text-white transition hover:bg-white/8"
+                >
+                  <X className="h-4 w-4" />
+                  Cancelar edicion
+                </button>
+              ) : null}
             </form>
 
             <div className="mt-4 space-y-2">
@@ -851,7 +1165,7 @@ export function DashboardShell({ initialData }: Props) {
               ) : (
                 data.latestFlows.map((flow) => (
                   <div key={flow.id} className="rounded-md border border-white/8 bg-white/4 px-3 py-3">
-                    <div className="flex items-center justify-between gap-3">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <div>
                         <p className="text-sm font-medium text-white">{flow.symbol}</p>
                         <p className="text-xs text-muted">{flow.flowDate}</p>
@@ -866,7 +1180,17 @@ export function DashboardShell({ initialData }: Props) {
                         {flow.flowType === "contribution" ? "Aportacion" : "Retirada"}
                       </span>
                     </div>
-                    <p className="mt-2 text-sm text-muted">{formatCurrency(flow.amountEur)}</p>
+                    <div className="mt-2 flex items-center justify-between gap-3">
+                      <p className="text-sm text-muted">{formatCurrency(flow.amountEur)}</p>
+                      <button
+                        type="button"
+                        onClick={() => startEditingFlow(flow)}
+                        className="inline-flex h-8 items-center gap-2 rounded-md border border-fuchsia-300/20 bg-fuchsia-300/8 px-2.5 text-xs font-medium text-fuchsia-100 transition hover:bg-fuchsia-300/14"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                        Editar
+                      </button>
+                    </div>
                   </div>
                 ))
               )}
@@ -902,7 +1226,7 @@ export function DashboardShell({ initialData }: Props) {
               <button
                 type="submit"
                 disabled={isPending}
-                className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-amber-300/30 bg-amber-300/10 px-4 text-sm font-medium text-amber-100 transition hover:bg-amber-300/16 disabled:opacity-70"
+                className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-md border border-amber-300/30 bg-amber-300/10 px-4 text-sm font-medium text-amber-100 transition hover:bg-amber-300/16 disabled:opacity-70"
               >
                 <Save className="h-4 w-4" />
                 Guardar benchmark

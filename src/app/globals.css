@@ -1,14 +1,14 @@
 @import "tailwindcss";
 
 :root {
-  --background: #05030c;
-  --foreground: #f6f2ff;
-  --panel: rgba(14, 9, 28, 0.82);
-  --panel-border: rgba(97, 246, 255, 0.16);
-  --accent: #61f6ff;
-  --accent-strong: #ff44c8;
-  --warning: #ffb347;
-  --muted: #9c95bb;
+  --background: #100d0b;
+  --foreground: #f2eadf;
+  --panel: rgba(24, 17, 14, 0.86);
+  --panel-border: rgba(190, 124, 74, 0.22);
+  --accent: #d9c27a;
+  --accent-strong: #c86b3c;
+  --warning: #b24a3a;
+  --muted: #9e8f7b;
 }
 
 @theme inline {
@@ -24,15 +24,16 @@
 
 html {
   background:
-    radial-gradient(circle at top, rgba(97, 246, 255, 0.14), transparent 36%),
-    radial-gradient(circle at bottom right, rgba(255, 68, 200, 0.16), transparent 32%),
-    linear-gradient(180deg, #080512 0%, #05030c 100%);
+    radial-gradient(circle at top left, rgba(200, 107, 60, 0.22), transparent 30%),
+    radial-gradient(circle at bottom right, rgba(178, 74, 58, 0.18), transparent 32%),
+    linear-gradient(180deg, #1a1411 0%, #100d0b 55%, #0c0908 100%);
 }
 
 body {
   background: transparent;
   color: var(--foreground);
   font-family: "Segoe UI", Arial, Helvetica, sans-serif;
+  overflow-x: hidden;
 }
 
 body::before {
@@ -42,10 +43,21 @@ body::before {
   pointer-events: none;
   opacity: 0.18;
   background-image:
-    linear-gradient(rgba(97, 246, 255, 0.08) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(97, 246, 255, 0.08) 1px, transparent 1px);
-  background-size: 100% 38px, 38px 100%;
+    linear-gradient(rgba(217, 194, 122, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(217, 194, 122, 0.05) 1px, transparent 1px);
+  background-size: 100% 42px, 42px 100%;
   mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.55), transparent 90%);
+}
+
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(135deg, transparent 0 48%, rgba(255, 255, 255, 0.03) 49%, transparent 50%) 0 0 / 28px 28px,
+    linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.24) 100%);
+  opacity: 0.14;
 }
 
 a {
@@ -57,27 +69,30 @@ button,
 input,
 select {
   font: inherit;
+  min-width: 0;
 }
 
 .panel {
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.015)),
+    linear-gradient(180deg, rgba(255, 242, 222, 0.03), rgba(255, 255, 255, 0.01)),
     var(--panel);
   border: 1px solid var(--panel-border);
   box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.03) inset,
-    0 24px 80px rgba(4, 3, 10, 0.48),
-    0 0 32px rgba(97, 246, 255, 0.06);
-  backdrop-filter: blur(16px);
+    0 0 0 1px rgba(255, 228, 196, 0.03) inset,
+    0 22px 60px rgba(3, 2, 1, 0.45),
+    0 0 0 1px rgba(200, 107, 60, 0.06);
+  backdrop-filter: blur(12px);
+  min-width: 0;
 }
 
 .panel-muted {
-  background: rgba(12, 9, 24, 0.72);
-  border: 1px solid rgba(156, 149, 187, 0.14);
+  background: rgba(17, 13, 11, 0.78);
+  border: 1px solid rgba(158, 143, 123, 0.18);
+  min-width: 0;
 }
 
 .neon-text {
-  text-shadow: 0 0 18px rgba(97, 246, 255, 0.28);
+  text-shadow: 0 0 18px rgba(200, 107, 60, 0.22);
 }
 
 .scanline {
@@ -89,8 +104,8 @@ select {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: linear-gradient(to bottom, transparent, rgba(255, 255, 255, 0.04), transparent);
-  opacity: 0.14;
+  background: linear-gradient(to bottom, transparent, rgba(255, 241, 210, 0.03), transparent);
+  opacity: 0.12;
 }
 
 .text-muted {
@@ -110,5 +125,25 @@ select {
 }
 
 .shadow-neon {
-  box-shadow: 0 0 0 1px rgba(97, 246, 255, 0.18), 0 0 24px rgba(97, 246, 255, 0.12);
+  box-shadow: 0 0 0 1px rgba(200, 107, 60, 0.2), 0 0 22px rgba(200, 107, 60, 0.12);
+}
+
+.panel-diesel {
+  position: relative;
+  overflow: hidden;
+}
+
+.panel-diesel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(120deg, rgba(217, 194, 122, 0.07), transparent 30%),
+    linear-gradient(180deg, transparent, rgba(178, 74, 58, 0.08));
+  mix-blend-mode: screen;
+}
+
+th button {
+  text-align: left;
 }

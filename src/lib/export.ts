@@ -27,7 +27,7 @@ function toCsvCell(value: string | number | null) {
   return text;
 }
 
-export function buildExportPayload() {
+export async function buildExportPayload() {
   const db = getDatabase();
   const transactions = db
     .prepare(
@@ -49,7 +49,7 @@ export function buildExportPayload() {
 
   return {
     exportedAt: new Date().toISOString(),
-    dashboard: getDashboardData(),
+    dashboard: await getDashboardData(),
     settings,
     transactions,
     trackedInstruments,
@@ -60,8 +60,8 @@ export function buildExportPayload() {
   };
 }
 
-export function exportJsonFile() {
-  const payload = buildExportPayload();
+export async function exportJsonFile() {
+  const payload = await buildExportPayload();
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const fileName = `portfolio-export-${stamp}.json`;
   const filePath = path.join(getExportsDir(), fileName);
@@ -76,8 +76,8 @@ export function exportJsonFile() {
   };
 }
 
-export function exportTransactionsCsvFile() {
-  const rows = buildExportPayload().transactions;
+export async function exportTransactionsCsvFile() {
+  const rows = (await buildExportPayload()).transactions;
   const header = [
     "id",
     "symbol",

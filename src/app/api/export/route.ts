@@ -7,7 +7,7 @@ export async function GET(request: Request) {
   const format = searchParams.get("format") ?? "json";
 
   if (format === "csv") {
-    const file = exportTransactionsCsvFile();
+    const file = await exportTransactionsCsvFile();
     return new Response(file.content, {
       headers: {
         "Content-Type": "text/csv; charset=utf-8",
@@ -17,7 +17,7 @@ export async function GET(request: Request) {
     });
   }
 
-  const file = exportJsonFile();
+  const file = await exportJsonFile();
   return new Response(file.content, {
     headers: {
       "Content-Type": "application/json; charset=utf-8",

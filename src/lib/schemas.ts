@@ -63,7 +63,17 @@ export const contributionInputSchema = z.object({
   flowDate: z.string().regex(isoDateRegex, "La fecha no es valida"),
 });
 
+export const trackedInstrumentUpdateInputSchema = trackedInstrumentInputSchema.extend({
+  id: z.coerce.number().int().positive("El instrumento es obligatorio"),
+});
+
+export const contributionUpdateInputSchema = contributionInputSchema.extend({
+  id: z.coerce.number().int().positive("El movimiento es obligatorio"),
+});
+
 export type TransactionInput = z.infer<typeof transactionInputSchema>;
 export type TrackedInstrumentInput = z.infer<typeof trackedInstrumentInputSchema>;
 export type SettingsInput = z.infer<typeof settingsInputSchema>;
 export type ContributionInput = z.infer<typeof contributionInputSchema>;
+export type TrackedInstrumentUpdateInput = z.infer<typeof trackedInstrumentUpdateInputSchema>;
+export type ContributionUpdateInput = z.infer<typeof contributionUpdateInputSchema>;

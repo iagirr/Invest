@@ -9,5 +9,5 @@ export async function GET(
   context: { params: Promise<{ symbol: string }> },
 ) {
   const { symbol } = await context.params;
-  return NextResponse.json(getAssetDetail(symbol));
+  return NextResponse.json(await getAssetDetail(symbol));
 }
